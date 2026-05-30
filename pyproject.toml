@@ -22,13 +22,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The interactive picker needs Tkinter, which ships with CPython but on Linux
-# is a separate OS package (e.g. `apt install python3-tk`) -- it can't be
-# pip-installed, so there's nothing extra to declare here for it. This group
+# The GUI/picker need Tkinter, which ships with CPython but on Linux is a
+# separate OS package (e.g. `apt install python3-tk`) -- it can't be
+# pip-installed, so there's nothing extra to declare for it here. This group
 # exists so `pip install .[gui]` reads as intentful and is a place to hang any
 # future GUI-only Python deps.
 gui = []
+# Opt-in deep-learning backend (LaMa). Heavy: pulls in torch. Off by default so
+# the core stays opencv + numpy.
+ml = ["torch>=1.13", "simple-lama-inpainting>=0.1.2", "Pillow>=9"]
 dev = ["pytest>=7"]
+# For building standalone executables (PyInstaller); used by the release CI.
+build = ["pyinstaller>=6"]
 
 [project.urls]
 Homepage = "https://github.com/yuangunn/pixel-watermark-cleaner"
@@ -37,9 +42,13 @@ Homepage = "https://github.com/yuangunn/pixel-watermark-cleaner"
 pwc = "clean:main"
 pwc-pick = "picker:main"
 
+[project.gui-scripts]
+# windowed entry point (no console on Windows/macOS)
+pwc-app = "app:main"
+
 [tool.setuptools]
-# clean.py / picker.py / picker_core.py are top-level modules, not a package.
-py-modules = ["clean", "picker", "picker_core"]
+# top-level modules, not a package.
+py-modules = ["engine", "clean", "picker", "picker_core", "app", "app_core"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

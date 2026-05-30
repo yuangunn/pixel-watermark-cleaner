@@ -29,8 +29,9 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+import engine
+
 SUPPORTED_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
-INPAINT_FLAGS = {"telea": cv2.INPAINT_TELEA, "ns": cv2.INPAINT_NS}
 
 
 # --------------------------------------------------------------------------- #
@@ -83,8 +84,9 @@ def parse_args(argv=None):
                         "(0..1), so one config fits images of different sizes")
 
     # inpainting
-    p.add_argument("--method", choices=["telea", "ns"], default="telea",
-                   help="cv2.inpaint algorithm (default: telea)")
+    p.add_argument("--method", choices=["telea", "ns", "lama"], default="telea",
+                   help="inpaint backend: telea/ns (OpenCV, default) or lama "
+                        "(deep learning, opt-in; needs the 'ml' extra)")
     p.add_argument("--radius", type=int, default=3,
                    help="inpaint radius in px (default: 3)")
     p.add_argument("--dilate", type=int, default=0,
@@ -202,49 +204,13 @@ def build_mask(shape, regions, dilate):
     return mask
 
 
-# --------------------------------------------------------------------------- #
-# channels: keep alpha completely out of the inpaint path
-# --------------------------------------------------------------------------- #
-def split_alpha(img):
-    """Return (colour, alpha). Alpha is None when the image has none. The
-    colour array is a contiguous copy ready for cv2.inpaint (1 or 3 channels)."""
-    if img.ndim == 3 and img.shape[2] == 4:        # BGRA
-        return np.ascontiguousarray(img[:, :, :3]), img[:, :, 3].copy()
-    if img.ndim == 3 and img.shape[2] == 2:        # gray + alpha
-        return np.ascontiguousarray(img[:, :, 0]), img[:, :, 1].copy()
-    return img.copy(), None
-
-
-def merge_alpha(color, alpha):
-    if alpha is None:
-        return color
-    return np.dstack([color, alpha])
-
-
-# --------------------------------------------------------------------------- #
-# palette matching (snap to colours that already exist in the source)
-# --------------------------------------------------------------------------- #
-def build_palette(color, mask, max_colors):
-    """Colours present *outside* the mask (the real content), optionally capped
-    to the ``max_colors`` most frequent. Every entry truly occurs in the
-    source, so snapping to it can never invent a colour."""
-    src = color[mask == 0]
-    if src.size == 0:                              # mask covers everything
-        src = color.reshape(-1, color.shape[-1]) if color.ndim == 3 \
-            else color.reshape(-1)
-    src = src.reshape(len(src), -1)
-    colors, counts = np.unique(src, axis=0, return_counts=True)
-    if 0 < max_colors < len(colors):
-        colors = colors[np.argsort(counts)[::-1][:max_colors]]
-    return colors
-
-
-def snap_to_palette(pixels, palette):
-    """Snap each pixel (N, C) to its nearest palette colour (Euclidean)."""
-    p = pixels.astype(np.int32)[:, None, :]        # (N, 1, C)
-    pal = palette.astype(np.int32)[None, :, :]     # (1, K, C)
-    idx = ((p - pal) ** 2).sum(axis=2).argmin(axis=1)
-    return palette[idx]
+# alpha / palette / inpainting all live in engine.py, the shared source of
+# truth used by both this CLI and the GUI app. These re-exports keep the public
+# names (and the tests that import them) working.
+split_alpha = engine.split_alpha
+merge_alpha = engine.merge_alpha
+build_palette = engine.build_palette
+snap_to_palette = engine.snap_to_palette
 
 
 # --------------------------------------------------------------------------- #
@@ -254,20 +220,12 @@ def process_image(img, args, regions):
     """Inpaint the masked rectangle(s) and composite them back over the
     untouched original. Pixels outside the mask, and the alpha channel, are
     preserved byte-for-byte."""
-    color, alpha = split_alpha(img)
-    mask = build_mask(color.shape, regions, args.dilate)
-    painted = cv2.inpaint(color, mask, args.radius, INPAINT_FLAGS[args.method])
-
-    m = mask > 0
-    sel = painted[m]
-    if args.palette_match and sel.size:
-        palette = build_palette(color, mask, args.max_colors)
-        snapped = snap_to_palette(sel.reshape(len(sel), -1), palette)
-        sel = snapped.reshape(sel.shape)
-
-    out = color.copy()
-    out[m] = sel
-    return merge_alpha(out, alpha)
+    mask = build_mask(img.shape, regions, dilate=0)   # engine applies --dilate
+    return engine.clean_image(img, mask,
+                              method=args.method, radius=args.radius,
+                              dilate=args.dilate,
+                              palette_match=args.palette_match,
+                              max_colors=args.max_colors)
 
 
 def draw_preview(img, regions):

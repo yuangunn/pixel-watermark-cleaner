@@ -101,11 +101,70 @@ def check_drag_and_cancel(tmp):
     print("ok: Escape cancels ->", r2)
 
 
+def check_app(tmp):
+    """Build the real App window, paint via mouse events, Clean, Undo, Save."""
+    import app as appmod
+
+    img = np.zeros((48, 48, 4), np.uint8)
+    img[:, :, 3] = 255
+    img[34:48, 34:48, :3] = (255, 0, 255)
+    path = str(tmp / "hero.png")
+    cv2.imwrite(path, img)
+
+    a = appmod.App(path, max_view=(400, 400))
+    a.root.deiconify()
+    a.root.focus_force()
+    a.root.update()
+    a.root.update_idletasks()
+    a.canvas.focus_set()
+    a.root.update()
+
+    # paint a brush stroke over the watermark with real canvas events
+    a.tool_var.set("brush")
+    a._sync_tool()
+    a.brush = 8
+    a.canvas.event_generate("<ButtonPress-1>", x=36, y=36, warp=True)
+    a.canvas.update()
+    for cx in range(36, 47, 2):
+        a.canvas.event_generate("<B1-Motion>", x=cx, y=42, warp=True)
+        a.canvas.update()
+    a.canvas.event_generate("<ButtonRelease-1>", x=46, y=46, warp=True)
+    a.canvas.update()
+    assert a.doc.has_mask(), "brush did not paint the mask"
+
+    # also box-select the rest of the mark, then Clean
+    a.doc.paint_rect(34, 34, 47, 47)
+    a.method_var.set("telea")
+    a.dilate_var.set(1)
+    a.on_clean()
+    a.root.update()
+    sel = np.zeros((48, 48), bool)
+    sel[34:48, 34:48] = True
+    produced = set(map(tuple, a.doc.image[sel][:, :3].tolist()))
+    assert (255, 0, 255) not in produced, "Clean did not remove the mark"
+
+    assert a.doc.can_undo()
+    a.on_undo()
+    a.root.update()
+    assert (255, 0, 255) in set(map(tuple, a.doc.image[sel][:, :3].tolist()))
+
+    a.redraw()
+    assert a.photo is not None
+
+    out = str(tmp / "out.png")
+    a.doc.redo()
+    a.doc.save(out)
+    assert cv2.imread(out, cv2.IMREAD_UNCHANGED).shape == (48, 48, 4)
+    a.root.destroy()
+    print("ok: app build + mouse paint + clean + undo + save")
+
+
 def main():
     import tempfile
     check_render()
     with tempfile.TemporaryDirectory() as d:
         check_drag_and_cancel(pathlib.Path(d))
+        check_app(pathlib.Path(d))
     print("GUI SMOKE OK")
     return 0
 

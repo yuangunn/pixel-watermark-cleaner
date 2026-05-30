@@ -1,37 +1,48 @@
 # pixel-watermark-cleaner (`pwc`)
 
-A batch CLI that regenerates **visible** watermark(s) sitting inside known
-rectangular region(s) of generated images, using local inpainting
-(`cv2.inpaint`). Built for **pixel-art game assets**, where the mark is overlaid
-on real content — clothing, weapons, scabbards — so cropping or flat-fill would
-wreck the artwork. Inpainting rebuilds plausible pixels from the surrounding
-content instead.
+Regenerate **visible** watermarks on generated images by painting over them and
+inpainting just that area — the surrounding content is rebuilt, so the artwork
+underneath survives. Built for **pixel-art game assets**, where the mark sits on
+top of real content (clothing, weapons, scabbards) and cropping or flat-fill
+would wreck it.
 
-You can point at the region(s) on the command line, store them in a JSON config,
-or **draw them on a representative image** and apply them across the whole batch.
+Three ways to use it, same engine underneath:
+
+- 🖱️ **Desktop app** (`pwc-app`) — open an image, **brush or box** over the
+  watermark, click **Clean**, **Save**. Paint-style, Undo/Redo. This is the
+  app most people want; prebuilt executables are on the
+  [Releases](../../releases) page (no Python needed).
+- 🎯 **Batch picker** (`pwc … --pick`) — draw the region once on a sample image,
+  then clean a whole folder with those coordinates.
+- ⌨️ **Headless CLI** (`pwc`) — give coordinates directly / via a JSON config;
+  ideal for scripts and CI.
 
 ## Scope
 
-This tool **only** regenerates the rectangle(s) you point it at.
+This tool **only** regenerates the area you point it at.
 
 - It does **not** detect or remove invisible, image-wide provenance signals
   (e.g. SynthID). Those are out of scope and untouched.
 - It is meant for assets **you have the right to edit**, and it assumes you keep
   any required "AI-generated" disclosure intact. Removing a visible watermark
   does not remove the obligation to disclose AI generation where that applies.
-- Originals are **never** overwritten — output always goes to a separate folder.
+- Originals are **never** overwritten — you save to a new file / output folder.
 
-## Install
+## Get it
+
+**Prebuilt app (easiest):** download the executable for your OS from
+[Releases](../../releases) and run it. Windows `.exe`, macOS, and Linux builds
+are produced automatically.
+
+**From source:**
 
 ```bash
-pip install -e .            # installs the `pwc` and `pwc-pick` commands
-# or, just the runtime deps, then run via python:
-pip install -r requirements.txt
+pip install -e .            # installs pwc, pwc-pick, and the pwc-app GUI
 ```
 
-Core dependencies are intentionally light: **OpenCV + numpy** only. The
-interactive picker also needs **Tkinter**, which ships with CPython but on Linux
-is a separate OS package:
+Core dependencies are intentionally light: **OpenCV + numpy** only. The GUI/
+picker also need **Tkinter**, which ships with CPython but on Linux is a
+separate OS package:
 
 ```bash
 sudo apt install python3-tk        # Debian/Ubuntu
@@ -39,11 +50,48 @@ sudo dnf install python3-tkinter   # Fedora
 # macOS / Windows: use the python.org installer (Tk included)
 ```
 
-## Quick start — draw the region, clean the batch
+## Desktop app
 
-The fastest way. A window opens on the first image in your input; drag a box (or
-several) over the watermark(s), press **Enter**, and every image is cleaned with
-those coordinates:
+```bash
+pwc-app              # or:  python app.py [image]
+```
+
+1. **Open** an image.
+2. Pick **Brush** (paint freely) or **Box** (drag a rectangle) and cover the
+   watermark. Right-drag erases; `[` / `]` resize the brush.
+3. Choose the **Engine** (`telea`/`ns`, or `lama` if installed), optionally
+   **Grow** the selection a few px to catch a glow, and **Palette** to snap to
+   existing colours.
+4. **Clean ▶** regenerates just the painted pixels. **Undo**/**Redo** as needed.
+5. **Save As** — defaults to `name_cleaned.png` and warns before overwriting the
+   original.
+
+| Shortcut | |
+| --- | --- |
+| `Ctrl-Z` / `Ctrl-Y` | undo / redo |
+| `Enter` | clean |
+| `Ctrl-S` | save as |
+| `[` / `]` | brush smaller / larger |
+
+### Higher-quality inpainting (optional)
+
+The default OpenCV backend is tiny and instant, great for flat pixel-art. For
+busier images you can opt into **LaMa**, a deep-learning inpainter (closer to
+"generative erase"). It's a heavy, separate install (pulls in PyTorch) and is
+**not** bundled in the prebuilt app:
+
+```bash
+pip install -e ".[ml]"     # adds torch + simple-lama-inpainting
+```
+
+Then pick `lama` as the engine in the app, or `--method lama` on the CLI. The
+first run downloads the model weights.
+
+## Batch: draw the region once, clean the whole folder
+
+For many same-layout images, skip the per-image app. A window opens on the first
+image; drag a box (or several) over the watermark(s), press **Enter**, and every
+image in the folder is cleaned with those coordinates:
 
 ```bash
 pwc assets/ --out cleaned/ --recursive --pick
@@ -164,17 +212,40 @@ pwc assets/ --recursive --config wm.json --dilate 4   # override one value
 
 Supported formats: `png`, `jpg`/`jpeg`, `webp`, `bmp`. PNG alpha is preserved.
 
+## Architecture
+
+| Module | Role |
+| --- | --- |
+| `engine.py` | the one inpainting entry point (`clean_image(img, mask, …)`); alpha handling, palette snap, cv2 + optional LaMa backends. Both UIs call this. |
+| `clean.py` | batch CLI (`pwc`) — input discovery, region geometry, config. |
+| `picker.py` / `picker_core.py` | batch region picker (`pwc-pick`); core is the headless geometry/state. |
+| `app.py` / `app_core.py` | desktop app (`pwc-app`); core is the headless document model (mask, undo/redo, save). |
+
+Keeping the engine and every UI's logic in headless cores means the locked
+invariants are asserted once and the Tkinter layers stay thin.
+
 ## Development
 
 ```bash
 pip install -e ".[dev]"
-pytest -q
+pytest -q                       # 78 headless tests
 ```
 
-The picker's geometry/state engine (`picker_core.py`) is fully unit-tested
-headlessly. The thin Tkinter widget layer (`picker.py`) is exercised separately
-by `tests/gui_smoke.py`, which CI runs under a virtual framebuffer (Xvfb). Tests
-synthesise their fixtures in code, so there are no binary assets in the repo.
+The geometry, document model, and engine are fully unit-tested without a
+display. The thin Tkinter layers are exercised by `tests/gui_smoke.py` — which
+builds the real window, paints with mouse events, and runs clean/undo/save —
+which CI runs under a virtual framebuffer (Xvfb). Tests synthesise their
+fixtures in code, so there are no binary assets in the repo.
+
+## Building executables
+
+The release workflow builds standalone apps with PyInstaller on each OS and
+attaches them to a GitHub Release when you push a `v*` tag. To build locally:
+
+```bash
+pip install -e ".[build]"
+pyinstaller packaging/pwc-app.spec     # -> dist/pwc-app(.exe)
+```
 
 ## License
 
