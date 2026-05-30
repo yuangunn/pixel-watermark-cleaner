@@ -1,15 +1,18 @@
 # pixel-watermark-cleaner (`pwc`)
 
-A batch CLI that regenerates a **visible** watermark sitting inside a known
-rectangular region of generated images, using local inpainting
+A batch CLI that regenerates **visible** watermark(s) sitting inside known
+rectangular region(s) of generated images, using local inpainting
 (`cv2.inpaint`). Built for **pixel-art game assets**, where the mark is overlaid
 on real content — clothing, weapons, scabbards — so cropping or flat-fill would
 wreck the artwork. Inpainting rebuilds plausible pixels from the surrounding
 content instead.
 
+You can point at the region(s) on the command line, store them in a JSON config,
+or **draw them on a representative image** and apply them across the whole batch.
+
 ## Scope
 
-This tool **only** regenerates the rectangle you point it at.
+This tool **only** regenerates the rectangle(s) you point it at.
 
 - It does **not** detect or remove invisible, image-wide provenance signals
   (e.g. SynthID). Those are out of scope and untouched.
@@ -21,21 +24,70 @@ This tool **only** regenerates the rectangle you point it at.
 ## Install
 
 ```bash
-pip install -e .          # installs the `pwc` command
+pip install -e .            # installs the `pwc` and `pwc-pick` commands
 # or, just the runtime deps, then run via python:
 pip install -r requirements.txt
 ```
 
-Core dependencies are intentionally light: **OpenCV + numpy** only.
-
-## Usage
+Core dependencies are intentionally light: **OpenCV + numpy** only. The
+interactive picker also needs **Tkinter**, which ships with CPython but on Linux
+is a separate OS package:
 
 ```bash
-# Point at a corner-anchored box (most common for a fixed watermark):
+sudo apt install python3-tk        # Debian/Ubuntu
+sudo dnf install python3-tkinter   # Fedora
+# macOS / Windows: use the python.org installer (Tk included)
+```
+
+## Quick start — draw the region, clean the batch
+
+The fastest way. A window opens on the first image in your input; drag a box (or
+several) over the watermark(s), press **Enter**, and every image is cleaned with
+those coordinates:
+
+```bash
+pwc assets/ --out cleaned/ --recursive --pick
+```
+
+Add `--save-config wm.json` to remember the coordinates, then next time skip the
+window entirely:
+
+```bash
+pwc assets/ --out cleaned/ --recursive --config wm.json
+```
+
+If your images differ in size, pick in **relative** mode so the box scales to
+each image:
+
+```bash
+pwc assets/ --out cleaned/ --recursive --pick-relative --save-config wm.json
+```
+
+### Picker controls
+
+| Input | Action |
+| --- | --- |
+| Left-drag | draw a selection rectangle |
+| Right-click | delete the rectangle under the cursor |
+| `u` / `Ctrl-Z` | undo the last rectangle |
+| `c` | clear all |
+| `Enter` | confirm and clean |
+| `Esc` / `q` | cancel |
+
+`pwc-pick IMAGE` runs the picker standalone and prints the regions as JSON (with
+`--save-config` to write a config), handy for scripting.
+
+## Usage without the picker
+
+```bash
+# Corner-anchored box (most common for one fixed watermark):
 pwc assets/ --out cleaned/ --recursive --corner br --box 40 16 --margin 4 4
 
-# Or give an explicit rectangle:
+# Explicit rectangle:
 pwc hero.png --out cleaned/ --region 210 230 40 16
+
+# Several rectangles at once:
+pwc hero.png --out cleaned/ --regions "[[210,230,40,16],[0,0,32,12]]"
 
 # Without installing:
 python clean.py hero.png --corner br --box 40 16
@@ -45,12 +97,12 @@ Output mirrors the input layout under `--out` (default `./cleaned`).
 
 ### Region
 
-Two ways to specify the watermark rectangle:
-
 | Option | Meaning |
 | --- | --- |
-| `--region X Y W H` | explicit rectangle (top-left origin) |
-| `--corner {br,bl,tr,tl}` + `--box W H` + `--margin MX MY` | a `W×H` box inset by `(MX, MY)` from the chosen corner |
+| `--region X Y W H` | one explicit rectangle (top-left origin) |
+| `--regions "[[x,y,w,h],…]"` | several rectangles as JSON |
+| `--corner {br,bl,tr,tl}` + `--box W H` + `--margin MX MY` | a `W×H` box inset by `(MX, MY)` from a corner |
+| `--relative` | read region coords as fractions of width/height (0..1) so one config fits different image sizes |
 
 ### Inpainting
 
@@ -67,26 +119,27 @@ Two ways to specify the watermark rectangle:
 | `--palette-match` | off | snap regenerated pixels to colours **already present** in the image — never invents a new colour |
 | `--max-colors N` | `16` | cap the matched palette to its N most common colours (`<=0` = no cap) |
 
-### Other
+### Workflow / modes
 
 | Option | Meaning |
 | --- | --- |
-| `--preview` | don't inpaint; save a copy with the region outlined, to check coordinates |
+| `--pick` / `--pick-relative` | draw region(s) on a representative image, then apply to the whole batch |
+| `--save-config FILE` | write the chosen region(s) + settings to a JSON config |
+| `--config FILE` | load defaults from a JSON config (CLI flags still override) |
+| `--preview` | don't inpaint; save a copy with the region(s) outlined, to check coordinates |
+| `--dry-run` | don't write anything; just report what would happen |
 | `--recursive` | recurse into input folders |
-| `--config FILE` | load defaults from a JSON file (see below) |
+| `--max-view W H` | cap the picker window size (default `1280 800`) |
 
-### Fixed coordinates with `--config`
+### Config file
 
-If your watermark is always in the same place, stop retyping coordinates: put
-them in a JSON file and pass `--config`. Keys are the long option names (dashes
-or underscores both work). **Explicit CLI flags always override the config.**
+Keys are the long option names (dashes or underscores both work). **Explicit CLI
+flags always override the config.**
 
 ```jsonc
-// watermark.example.json
+// wm.json  (e.g. produced by --save-config)
 {
-  "corner": "br",
-  "box": [40, 16],
-  "margin": [4, 4],
+  "regions": [[210, 230, 40, 16], [0, 0, 32, 12]],
   "method": "telea",
   "radius": 3,
   "dilate": 2,
@@ -96,8 +149,8 @@ or underscores both work). **Explicit CLI flags always override the config.**
 ```
 
 ```bash
-pwc assets/ --recursive --config watermark.example.json
-pwc assets/ --recursive --config watermark.example.json --dilate 4   # override one value
+pwc assets/ --recursive --config wm.json
+pwc assets/ --recursive --config wm.json --dilate 4   # override one value
 ```
 
 ## Guarantees (locked by tests)
@@ -118,8 +171,10 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-Tests synthesise their fixtures in code, so there are no binary assets in the
-repo. CI runs `pytest` on every push and pull request.
+The picker's geometry/state engine (`picker_core.py`) is fully unit-tested
+headlessly. The thin Tkinter widget layer (`picker.py`) is exercised separately
+by `tests/gui_smoke.py`, which CI runs under a virtual framebuffer (Xvfb). Tests
+synthesise their fixtures in code, so there are no binary assets in the repo.
 
 ## License
 

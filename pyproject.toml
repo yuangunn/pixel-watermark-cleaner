@@ -22,6 +22,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The interactive picker needs Tkinter, which ships with CPython but on Linux
+# is a separate OS package (e.g. `apt install python3-tk`) -- it can't be
+# pip-installed, so there's nothing extra to declare here for it. This group
+# exists so `pip install .[gui]` reads as intentful and is a place to hang any
+# future GUI-only Python deps.
+gui = []
 dev = ["pytest>=7"]
 
 [project.urls]
@@ -29,10 +35,15 @@ Homepage = "https://github.com/yuangunn/pixel-watermark-cleaner"
 
 [project.scripts]
 pwc = "clean:main"
+pwc-pick = "picker:main"
 
 [tool.setuptools]
-# clean.py is a single top-level module, not a package.
-py-modules = ["clean"]
+# clean.py / picker.py / picker_core.py are top-level modules, not a package.
+py-modules = ["clean", "picker", "picker_core"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# gui_smoke.py needs a real display (Xvfb); it's run directly in CI, not
+# collected here. Naming it gui_smoke (not test_*) already excludes it, but be
+# explicit so a stray rename can't pull it into the headless run.
+addopts = "--ignore=tests/gui_smoke.py"

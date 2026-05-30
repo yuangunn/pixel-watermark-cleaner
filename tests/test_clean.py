@@ -23,8 +23,9 @@ import clean
 # helpers
 # --------------------------------------------------------------------------- #
 def region_ns(**kw):
-    """A minimal Namespace good enough for clean.resolve_region."""
-    base = dict(region=None, corner=None, box=None, margin=[0, 0])
+    """A minimal Namespace good enough for clean.resolve_region(s)."""
+    base = dict(region=None, regions=None, corner=None, box=None,
+                margin=[0, 0], relative=False)
     base.update(kw)
     return Namespace(**base)
 
@@ -299,3 +300,117 @@ def test_config_dashed_keys_are_accepted(tmp_path):
                           "--config", str(cfg)])
     assert a.palette_match is True
     assert a.max_colors == 12
+
+
+# --------------------------------------------------------------------------- #
+# multiple regions
+# --------------------------------------------------------------------------- #
+def make_two_marks(path, h=64, w=64):
+    """Magenta mark in the br corner, yellow mark in the tl corner."""
+    img = np.zeros((h, w, 4), np.uint8)
+    img[:, :, 0] = 200
+    img[:, :, 1] = 120
+    img[:, :, 2] = 40
+    img[:, :, 3] = (np.add.outer(np.arange(h), np.arange(w)) % 256).astype(np.uint8)
+    img[h - 16:h, w - 16:w, :3] = (255, 0, 255)
+    img[0:12, 0:12, :3] = (255, 255, 0)
+    assert cv2.imwrite(str(path), img)
+    return img
+
+
+def test_resolve_regions_list():
+    args = region_ns(regions=[[48, 48, 16, 16], [0, 0, 12, 12]])
+    assert clean.resolve_regions(args, 64, 64) == [(48, 48, 16, 16), (0, 0, 12, 12)]
+
+
+def test_resolve_regions_single_region_wrapped():
+    args = region_ns(region=[3, 7, 11, 13])
+    assert clean.resolve_regions(args, 100, 100) == [(3, 7, 11, 13)]
+
+
+def test_resolve_regions_relative_scales_with_size():
+    args = region_ns(regions=[[0.75, 0.75, 0.25, 0.25]], relative=True)
+    assert clean.resolve_regions(args, 64, 64) == [(48, 48, 16, 16)]
+    assert clean.resolve_regions(args, 128, 128) == [(96, 96, 32, 32)]
+
+
+def test_build_mask_unions_multiple_regions():
+    mask = clean.build_mask((64, 64), [(48, 48, 16, 16), (0, 0, 12, 12)], dilate=0)
+    assert mask[48:64, 48:64].all()
+    assert mask[0:12, 0:12].all()
+    assert mask[30, 30] == 0                  # untouched middle
+
+
+def test_two_marks_both_removed_outside_lossless(tmp_path):
+    src = tmp_path / "in" / "two.png"
+    src.parent.mkdir()
+    make_two_marks(src)
+    out = tmp_path / "out"
+
+    rc = clean.main([str(src), "--out", str(out),
+                     "--regions", "[[48,48,16,16],[0,0,12,12]]"])
+    assert rc == 0
+
+    o = read(src)
+    r = read(out / "two.png")
+    mask = clean.build_mask(o.shape, [(48, 48, 16, 16), (0, 0, 12, 12)], 0)
+    outside = mask == 0
+    produced = set(map(tuple, r[mask > 0][:, :3].tolist()))
+    assert (255, 0, 255) not in produced       # magenta gone
+    assert (255, 255, 0) not in produced       # yellow gone
+    assert np.array_equal(o[:, :, :3][outside], r[:, :, :3][outside])
+    assert np.array_equal(o[:, :, 3], r[:, :, 3])
+
+
+# --------------------------------------------------------------------------- #
+# config save round-trips back into a working run
+# --------------------------------------------------------------------------- #
+def test_save_config_roundtrip(tmp_path):
+    import json
+    args = region_ns(regions=[[48, 48, 16, 16], [0, 0, 12, 12]],
+                     method="ns", radius=4, dilate=2,
+                     palette_match=True, max_colors=8)
+    cfg = tmp_path / "picked.json"
+    clean.save_config(args, str(cfg))
+
+    data = json.loads(cfg.read_text())
+    assert data["regions"] == [[48, 48, 16, 16], [0, 0, 12, 12]]
+    assert data["method"] == "ns" and data["dilate"] == 2
+    assert data["palette-match"] is True
+
+    # the saved file must parse straight back into a usable namespace
+    reloaded = clean.parse_args(["img.png", "--config", str(cfg)])
+    assert reloaded.regions == [[48, 48, 16, 16], [0, 0, 12, 12]]
+    assert reloaded.method == "ns"
+
+
+def test_save_config_creates_missing_parent_dirs(tmp_path):
+    args = region_ns(regions=[[1, 2, 3, 4]], method="telea", radius=3,
+                     dilate=0, palette_match=False, max_colors=16)
+    cfg = tmp_path / "nested" / "deeper" / "wm.json"
+    clean.save_config(args, str(cfg))         # parent dirs don't exist yet
+    assert cfg.exists()
+
+
+def test_save_config_relative_flag(tmp_path):
+    import json
+    args = region_ns(regions=[[0.75, 0.75, 0.25, 0.25]], relative=True,
+                     method="telea", radius=3, dilate=0,
+                     palette_match=False, max_colors=16)
+    cfg = tmp_path / "rel.json"
+    clean.save_config(args, str(cfg))
+    data = json.loads(cfg.read_text())
+    assert data["relative"] is True
+    assert data["regions"] == [[0.75, 0.75, 0.25, 0.25]]
+
+
+def test_dry_run_writes_nothing(tmp_path):
+    src = tmp_path / "in" / "a.png"
+    src.parent.mkdir()
+    make_bgra(src)
+    out = tmp_path / "out"
+
+    rc = clean.main([str(src), "--out", str(out), "--region", "48", "48",
+                     "16", "16", "--dry-run"])
+    assert rc == 0
+    assert not out.exists()                    # nothing written

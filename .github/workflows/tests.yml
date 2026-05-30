@@ -21,3 +21,21 @@ jobs:
           pip install -e ".[dev]"
       - name: Run tests
         run: pytest -q
+
+  gui-smoke:
+    # The picker geometry is unit-tested headlessly; this job additionally
+    # exercises the real Tkinter rendering path under a virtual framebuffer.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install system Tk + Xvfb
+        run: sudo apt-get update && sudo apt-get install -y python3-tk xvfb
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Render + drive picker under Xvfb
+        run: xvfb-run -a python tests/gui_smoke.py
