@@ -38,11 +38,18 @@ Differently-sized files are skipped with a notice.
 | `sw.js` | service worker — offline caching of the app shell + OpenCV.js/JSZip. |
 | `index.html`, `styles.css` | minimal shell (visual design is intentionally plain — see `../docs/design-handoff.md`). |
 
+## Deploy
+
+Any static host works. A GitHub Pages workflow is included
+(`.github/workflows/pages.yml`): enable **Settings ▸ Pages ▸ Source = "GitHub
+Actions"**, then it deploys `web/` on push to `main` (or run it manually on your
+branch to preview). Pages on a **private** repo needs a paid plan.
+
 ## Notes
 
-- OpenCV.js and JSZip load from a CDN and are then cached for offline use. For
-  guaranteed first-load-offline, vendor `opencv.js` locally and point
-  `OPENCV_URL` in `engine.js` at it.
+- OpenCV.js and JSZip are **vendored** in `web/vendor/` (no third-party CDN), so
+  the app is reliably cached and works offline after the first load. To slim the
+  repo, point `OPENCV_URL` in `engine.js` at a CDN instead.
 - The LaMa (deep-learning) backend is **not** in the web build — it's
   desktop/server-only.
 

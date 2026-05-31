@@ -1,15 +1,16 @@
 /* Service worker: makes the app work offline.
  *
- * - App shell (HTML/CSS/JS/icon) is precached on install.
- * - Heavy CDN deps (OpenCV.js wasm, JSZip) are cached on first use, so the app
- *   is fully offline after the first successful online session.
+ * Everything (incl. the vendored OpenCV.js wasm and JSZip) is same-origin and
+ * precached on install, so after the first successful load the app is fully
+ * offline with no third-party CDN dependency.
  * Bump CACHE when shipping changes to invalidate the old shell.
  */
-const CACHE = 'pwc-v1';
+const CACHE = 'pwc-v2';
 const SHELL = [
   './', './index.html', './styles.css',
   './app.js', './core.js', './engine.js',
   './manifest.webmanifest', './icon.svg',
+  './vendor/opencv.js', './vendor/jszip.min.js',
 ];
 
 self.addEventListener('install', (e) => {

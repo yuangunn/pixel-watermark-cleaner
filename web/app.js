@@ -10,7 +10,7 @@
 import * as core from './core.js';
 import { loadOpenCv, inpaintFactory } from './engine.js';
 
-const JSZIP_URL = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+const JSZIP_URL = './vendor/jszip.min.js';     // vendored; no CDN dependency
 
 const $ = (id) => document.getElementById(id);
 const el = {

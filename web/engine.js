@@ -10,9 +10,10 @@
  * tested. app.js wires loadOpenCv() + inpaintFactory() into core.cleanRGBA().
  */
 
-// Swap to a vendored copy for guaranteed offline first-load; CDN is cached by
-// the service worker after the first successful fetch.
-export const OPENCV_URL = 'https://docs.opencv.org/4.x/opencv.js';
+// Vendored locally (web/vendor/) so the app has no third-party CDN dependency
+// and is reliably cached for offline use. Point this at a CDN URL instead if
+// you'd rather not ship the ~11 MB file.
+export const OPENCV_URL = './vendor/opencv.js';
 
 export function loadOpenCv(url = OPENCV_URL) {
   return new Promise((resolve, reject) => {

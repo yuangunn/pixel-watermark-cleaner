@@ -135,7 +135,11 @@ Or host the `web/` folder on any static host (GitHub Pages, Netlify, …).
 adjustable size, palette-snap, and grow are all there, and it's touch-friendly.
 
 The image logic lives in `web/core.js` (pure, unit-tested under Node, mirroring
-the Python engine's invariants); `web/engine.js` is the OpenCV.js glue.
+the Python engine's invariants); `web/engine.js` is the OpenCV.js glue. OpenCV.js
+and JSZip are **vendored** (`web/vendor/`), so there's no third-party CDN
+dependency. Deploy `web/` to any static host — an included Pages workflow
+(`.github/workflows/pages.yml`) publishes it on push to `main` once Pages is
+enabled (private repos need a paid plan).
 
 ## Batch: draw the region once, clean the whole folder
 
