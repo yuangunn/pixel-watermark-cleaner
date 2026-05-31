@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="pwc">
+  <rect width="512" height="512" rx="96" fill="#1f2330"/>
+  <!-- little scene being "cleaned" -->
+  <rect x="96" y="300" width="320" height="120" fill="#2f7d4f"/>
+  <circle cx="200" cy="250" r="56" fill="#5aa0d8"/>
+  <rect x="270" y="240" width="60" height="120" fill="#c0392b"/>
+  <!-- selection box + brush stroke -->
+  <rect x="150" y="150" width="220" height="220" fill="none" stroke="#3b82f6" stroke-width="14" stroke-dasharray="26 18"/>
+  <circle cx="330" cy="180" r="34" fill="#3b82f6" opacity="0.55"/>
+</svg>

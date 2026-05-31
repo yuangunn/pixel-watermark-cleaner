@@ -6,12 +6,14 @@ underneath survives. Built for **pixel-art game assets**, where the mark sits on
 top of real content (clothing, weapons, scabbards) and cropping or flat-fill
 would wreck it.
 
-Three ways to use it, same engine underneath:
+Four ways to use it, same approach underneath:
 
+- 🌐 **Web app / PWA** (`web/`) — runs **in the browser**, desktop *and mobile*,
+  no install and no upload. Works offline after first load. Batch-cleans many
+  same-size images from one mask. (OpenCV.js / WebAssembly.)
 - 🖱️ **Desktop app** (`pwc-app`) — open an image, **brush or box** over the
-  watermark, click **Clean**, **Save**. Paint-style, Undo/Redo. This is the
-  app most people want; prebuilt executables are on the
-  [Releases](../../releases) page (no Python needed).
+  watermark, click **Clean**, **Save**. Paint-style, Undo/Redo. Prebuilt
+  executables are on the [Releases](../../releases) page (no Python needed).
 - 🎯 **Batch picker** (`pwc … --pick`) — draw the region once on a sample image,
   then clean a whole folder with those coordinates.
 - ⌨️ **Headless CLI** (`pwc`) — give coordinates directly / via a JSON config;
@@ -110,6 +112,30 @@ pip install -e ".[ml]"     # adds torch + simple-lama-inpainting
 
 Then pick `lama` as the engine in the app, or `--method lama` on the CLI. The
 first run downloads the model weights.
+
+## Web app (offline, in the browser)
+
+A zero-install version that runs **entirely client-side** — desktop *and mobile*
+browsers, no server, no upload. After the first load it works **offline** and is
+installable as a PWA. It uses OpenCV.js (WebAssembly) for the same Telea/NS
+inpainting; the heavier LaMa backend is desktop/server-only.
+
+Run locally (a service worker needs `http://`, not `file://`, so serve it):
+
+```bash
+cd web
+python3 -m http.server 8000      # then open http://localhost:8000
+```
+
+Or host the `web/` folder on any static host (GitHub Pages, Netlify, …).
+
+**Batch:** drop in several images of the **same size** with the watermark in the
+**same spot**, paint the mask once, and **Clean all & download** runs every image
+(one file downloads directly; several are zipped). Brush / Box / Erase,
+adjustable size, palette-snap, and grow are all there, and it's touch-friendly.
+
+The image logic lives in `web/core.js` (pure, unit-tested under Node, mirroring
+the Python engine's invariants); `web/engine.js` is the OpenCV.js glue.
 
 ## Batch: draw the region once, clean the whole folder
 
