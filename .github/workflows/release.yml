@@ -1,14 +1,21 @@
 name: release
 
-# Build standalone desktop executables and attach them to a GitHub Release.
-# Triggers on a version tag (e.g. `v0.1.0`), or manually from the Actions tab.
+# Build standalone desktop executables and publish them to a *draft* GitHub
+# Release. Triggers:
+#   * a version tag `v*`              -> release named after the tag
+#   * push to the active dev branch   -> refreshes the v0.1.0 draft (lets the
+#                                        build run where tag pushes aren't
+#                                        permitted; nothing goes public -- it's
+#                                        a draft until a human hits Publish)
+#   * manual run from the Actions tab
 on:
   push:
     tags: ["v*"]
+    branches: ["claude/clever-galileo-agBJP"]
   workflow_dispatch:
 
 permissions:
-  contents: write          # needed to create/update the Release
+  contents: write          # create/update the Release + tag from CI
 
 jobs:
   build:
@@ -56,9 +63,33 @@ jobs:
           name: ${{ matrix.artifact }}
           path: out/${{ matrix.artifact }}
 
-      - name: Attach to Release
-        if: startsWith(github.ref, 'refs/tags/')
+  release:
+    needs: build
+    if: ${{ always() }}            # publish whatever built (don't block on one OS)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Collect built executables
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lR dist || true
+
+      - name: Publish draft Release
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
-          files: out/${{ matrix.artifact }}
+          draft: true            # stays a draft until a human publishes it
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.0' }}
+          name: pixel-watermark-cleaner ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.0' }}
+          body: |
+            Standalone builds of the pixel-watermark-cleaner desktop app.
+            Download the file for your OS, then run it -- no Python needed.
+
+            * `pwc-app-windows.exe` — Windows
+            * `pwc-app-macos` — macOS (right-click ▸ Open the first time)
+            * `pwc-app-linux` — Linux (`chmod +x` then run)
+
+            Open an image, brush or box over the watermark, click **Clean**, **Save**.
+          files: dist/**
