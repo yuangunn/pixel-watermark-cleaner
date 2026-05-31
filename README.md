@@ -17,16 +17,40 @@ Three ways to use it, same engine underneath:
 - ⌨️ **Headless CLI** (`pwc`) — give coordinates directly / via a JSON config;
   ideal for scripts and CI.
 
-## Scope
+## Intended use & responsible use
 
-This tool **only** regenerates the area you point it at.
+A tool for **regenerating watermarks on images you have the right to edit** —
+primarily your own AI-generated game assets, where a visible mark sits on top of
+artwork you created and want to keep.
 
+**✅ Use it for**
+
+- Cleaning visible watermarks/marks from assets **you own or created**.
+- Your own AI-generated images — where *you* remain responsible for any required
+  "AI-generated" disclosure. Removing a visible watermark does **not** remove
+  that obligation.
+
+**🚫 Don't use it for**
+
+- Removing watermarks, signatures, or copyright marks from content you **don't
+  own or aren't licensed to edit** (stock photos, other artists' work, etc.).
+- Stripping a provider's watermark to bypass licensing or paywalls.
+- Removing or altering **copyright-management information** to misrepresent
+  authorship or to facilitate infringement.
+
+### Scope — what it touches
+
+- It **only** regenerates the area you point it at; every other pixel (and the
+  alpha channel) is byte-for-byte unchanged.
 - It does **not** detect or remove invisible, image-wide provenance signals
   (e.g. SynthID). Those are out of scope and untouched.
-- It is meant for assets **you have the right to edit**, and it assumes you keep
-  any required "AI-generated" disclosure intact. Removing a visible watermark
-  does not remove the obligation to disclose AI generation where that applies.
 - Originals are **never** overwritten — you save to a new file / output folder.
+
+> **Disclaimer.** This software is provided "as is" under the MIT License, with
+> no warranty of any kind. You are solely responsible for ensuring you have the
+> right to modify any image you process, and for complying with applicable laws
+> (including copyright and DMCA §1202 regarding copyright-management information)
+> and any third-party terms. The authors accept no liability for misuse.
 
 ## Get it
 
@@ -250,3 +274,14 @@ pyinstaller packaging/pwc-app.spec     # -> dist/pwc-app(.exe)
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+### Third-party components
+
+- **OpenCV** (`opencv-python-headless`) — Apache-2.0
+- **NumPy** — BSD-3-Clause
+- Optional `[ml]` backend: **PyTorch** (BSD-3-Clause) and **LaMa** via
+  `simple-lama-inpainting`. The LaMa model weights are downloaded at runtime and
+  carry their **own license** (review it before commercial use); they are **not**
+  redistributed in this repository or bundled in the prebuilt app.
+- Prebuilt executables are produced with **PyInstaller**, whose bootloader has a
+  GPL-with-exception that permits distributing bundled apps under any license.

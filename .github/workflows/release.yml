@@ -1,17 +1,12 @@
 name: release
 
 # Build standalone desktop executables and publish them to a *draft* GitHub
-# Release. Triggers:
-#   * a version tag `v*`              -> release named after the tag
-#   * push to the active dev branch   -> refreshes the v0.1.0 draft (lets the
-#                                        build run where tag pushes aren't
-#                                        permitted; nothing goes public -- it's
-#                                        a draft until a human hits Publish)
-#   * manual run from the Actions tab
+# Release (stays a draft until a human hits Publish). Triggers:
+#   * a version tag `v*`           -> release named after the tag
+#   * manual run from the Actions tab (workflow_dispatch) -> refreshes v0.1.0
 on:
   push:
     tags: ["v*"]
-    branches: ["claude/clever-galileo-agBJP"]
   workflow_dispatch:
 
 permissions:
