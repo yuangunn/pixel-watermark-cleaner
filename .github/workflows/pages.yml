@@ -32,7 +32,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
+      - name: Configure Pages (auto-enable if needed)
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true        # turn Pages on via the API; no manual setting
       - name: Upload web/ as the Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
