@@ -1,0 +1,90 @@
+name: release
+
+# Build standalone desktop executables and publish them to a *draft* GitHub
+# Release (stays a draft until a human hits Publish). Triggers:
+#   * a version tag `v*`           -> release named after the tag
+#   * manual run from the Actions tab (workflow_dispatch) -> refreshes v0.1.0
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write          # create/update the Release + tag from CI
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: pwc-app-windows.exe
+            built: dist/pwc-app.exe
+          - os: macos-latest
+            artifact: pwc-app-macos
+            built: dist/pwc-app
+          - os: ubuntu-latest
+            artifact: pwc-app-linux
+            built: dist/pwc-app
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Linux Tk (build host needs the module present)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[build]"
+
+      - name: Build executable
+        run: pyinstaller packaging/pwc-app.spec
+
+      - name: Rename for upload
+        shell: bash
+        run: |
+          mkdir -p out
+          cp "${{ matrix.built }}" "out/${{ matrix.artifact }}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: out/${{ matrix.artifact }}
+
+  release:
+    needs: build
+    if: ${{ always() }}            # publish whatever built (don't block on one OS)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Collect built executables
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lR dist || true
+
+      - name: Publish draft Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true            # stays a draft until a human publishes it
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.0' }}
+          name: pixel-watermark-cleaner ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.0' }}
+          body: |
+            Standalone builds of the pixel-watermark-cleaner desktop app.
+            Download the file for your OS, then run it -- no Python needed.
+
+            * `pwc-app-windows.exe` — Windows
+            * `pwc-app-macos` — macOS (right-click ▸ Open the first time)
+            * `pwc-app-linux` — Linux (`chmod +x` then run)
+
+            Open an image, brush or box over the watermark, click **Clean**, **Save**.
+          files: dist/**

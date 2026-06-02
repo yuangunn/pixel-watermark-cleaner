@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pixel-watermark-cleaner"
+version = "0.1.0"
+description = "Batch-regenerate a visible watermark region in generated images via local inpainting."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+keywords = ["inpainting", "watermark", "pixel-art", "opencv", "cli", "game-assets"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics",
+    "Environment :: Console",
+]
+# Core stays intentionally light: OpenCV + numpy only.
+dependencies = [
+    "opencv-python-headless>=4.5",
+    "numpy>=1.20",
+]
+
+[project.optional-dependencies]
+# The GUI/picker need Tkinter, which ships with CPython but on Linux is a
+# separate OS package (e.g. `apt install python3-tk`) -- it can't be
+# pip-installed, so there's nothing extra to declare for it here. This group
+# exists so `pip install .[gui]` reads as intentful and is a place to hang any
+# future GUI-only Python deps.
+gui = []
+# Opt-in deep-learning backend (LaMa). Heavy: pulls in torch. Off by default so
+# the core stays opencv + numpy.
+ml = ["torch>=1.13", "simple-lama-inpainting>=0.1.2", "Pillow>=9"]
+dev = ["pytest>=7"]
+# For building standalone executables (PyInstaller); used by the release CI.
+build = ["pyinstaller>=6"]
+
+[project.urls]
+Homepage = "https://github.com/yuangunn/pixel-watermark-cleaner"
+
+[project.scripts]
+pwc = "clean:main"
+pwc-pick = "picker:main"
+
+[project.gui-scripts]
+# windowed entry point (no console on Windows/macOS)
+pwc-app = "app:main"
+
+[tool.setuptools]
+# top-level modules, not a package.
+py-modules = ["engine", "clean", "picker", "picker_core", "app", "app_core"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# gui_smoke.py needs a real display (Xvfb); it's run directly in CI, not
+# collected here. Naming it gui_smoke (not test_*) already excludes it, but be
+# explicit so a stray rename can't pull it into the headless run.
+addopts = "--ignore=tests/gui_smoke.py"

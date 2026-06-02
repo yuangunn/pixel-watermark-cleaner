@@ -1,0 +1,5 @@
+# Core runtime: kept intentionally light (OpenCV + numpy only).
+# Use opencv-python-headless for servers/CI; swap to opencv-python locally if
+# you want the GUI-enabled build.
+opencv-python-headless>=4.5
+numpy>=1.20

@@ -1,0 +1,10 @@
+{
+  "corner": "br",
+  "box": [40, 16],
+  "margin": [4, 4],
+  "method": "telea",
+  "radius": 3,
+  "dilate": 2,
+  "palette-match": true,
+  "max-colors": 16
+}

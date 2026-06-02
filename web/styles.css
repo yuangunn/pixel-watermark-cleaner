@@ -1,0 +1,46 @@
+/* Functional baseline only -- visual design is handled separately
+   (see docs/design-handoff.md). Kept intentionally plain. */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  display: flex; flex-direction: column; min-height: 100%;
+  font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: #e6e8ee; background: #1f2330;
+}
+header {
+  display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+  padding: 10px 14px; background: #171a24; border-bottom: 1px solid #2c3142;
+}
+.muted { color: #9aa3b2; font-size: 12px; }
+
+.toolbar {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 8px 12px; background: #21263a; border-bottom: 1px solid #2c3142;
+}
+.toolbar .group { display: inline-flex; gap: 6px; align-items: center; padding: 0 4px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border: 1px solid #3a4156;
+  border-radius: 8px; background: #2c3346; color: #e6e8ee; cursor: pointer;
+  font-size: 13px; user-select: none;
+}
+.btn:hover { background: #36405a; }
+.btn.primary { background: #3b82f6; border-color: #3b82f6; color: #fff; font-weight: 600; }
+.btn.primary:hover { background: #2f6fe0; }
+select, input[type="number"] { background: #2c3346; color: #e6e8ee; border: 1px solid #3a4156; border-radius: 6px; padding: 4px 6px; }
+input[type="number"] { width: 56px; }
+
+#stage { flex: 1; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 16px; }
+#view { background: #14161e; image-rendering: pixelated; touch-action: none; max-width: 100%; box-shadow: 0 2px 18px rgba(0,0,0,.4); }
+
+.dropzone {
+  max-width: 560px; text-align: center; padding: 36px 24px;
+  border: 2px dashed #3a4156; border-radius: 14px; background: #1b1f2c;
+}
+.dropzone.drag { border-color: #3b82f6; background: #1e2740; }
+.link { color: #6aa6ff; cursor: pointer; text-decoration: underline; }
+
+.status {
+  padding: 7px 14px; background: #171a24; border-top: 1px solid #2c3142;
+  color: #b9c0cf; font-size: 12px; white-space: pre-wrap;
+}

@@ -1,0 +1,44 @@
+name: pages
+
+# Deploy the web app (web/) to GitHub Pages.
+#
+# Setup (one-time): repo Settings ▸ Pages ▸ Source = "GitHub Actions".
+# Note: GitHub Pages on a PRIVATE repo requires a paid plan (Pro/Team/…). On a
+# free private repo this workflow runs but publishing is disabled until the repo
+# is public or the plan supports it.
+#
+# Triggers on pushes to main (the merged site) and on manual dispatch — use
+# "Run workflow" on your branch to preview before merging.
+on:
+  push:
+    branches: ["main"]
+    paths: ["web/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Pages (auto-enable if needed)
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true        # turn Pages on via the API; no manual setting
+      - name: Upload web/ as the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4
