@@ -62,32 +62,53 @@ function opts() {
 // --------------------------------------------------------------------------- //
 // file loading
 // --------------------------------------------------------------------------- //
-async function decode(file) {
-  const bmp = await createImageBitmap(file);
-  const c = document.createElement('canvas');
-  c.width = bmp.width; c.height = bmp.height;
-  const cx = c.getContext('2d');
-  cx.drawImage(bmp, 0, 0);
-  const id = cx.getImageData(0, 0, bmp.width, bmp.height);
-  bmp.close?.();
-  return { name: file.name, rgba: id.data, w: bmp.width, h: bmp.height };
+function decode(file) {
+  // <img>-based decode works on every browser (incl. mobile Safari, where
+  // createImageBitmap can stall indefinitely). Resolves to {name, rgba, w, h}.
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    let timer;
+    const finish = (fn) => { clearTimeout(timer); URL.revokeObjectURL(url); fn(); };
+    timer = setTimeout(() => finish(() => reject(new Error('timed out'))), 30000);
+    img.onload = () => {
+      try {
+        const w = img.naturalWidth, h = img.naturalHeight;
+        if (!w || !h) throw new Error('empty image');
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const cx = c.getContext('2d', { willReadFrequently: true });
+        cx.drawImage(img, 0, 0);
+        const id = cx.getImageData(0, 0, w, h);
+        finish(() => resolve({ name: file.name, rgba: id.data, w, h }));
+      } catch (e) { finish(() => reject(e)); }
+    };
+    img.onerror = () => finish(() => reject(new Error('could not load image')));
+    img.src = url;
+  });
 }
 
 async function loadFiles(fileList) {
-  const incoming = [...fileList].filter((f) => f.type.startsWith('image/'));
-  if (!incoming.length) return;
-  setStatus('Decoding…');
+  const incoming = [...fileList].filter(
+    (f) => f.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|gif)$/i.test(f.name));
+  if (!incoming.length) { setStatus('No image files selected.'); return; }
+  setStatus(`Decoding ${incoming.length} image(s)…`);
+
   const decoded = [];
+  const failed = [];
   for (const f of incoming) {
     try { decoded.push(await decode(f)); }
-    catch { /* skip unreadable */ }
+    catch { failed.push(f.name); }
   }
-  if (!decoded.length) { setStatus('No readable images.'); return; }
+  if (!decoded.length) {
+    setStatus(`Could not open ${failed.length} file(s): ${failed.join(', ')}`);
+    return;
+  }
 
   // The first image sets the reference size; others must match (same-size batch).
   const ref = decoded[0];
   const kept = decoded.filter((d) => d.w === ref.w && d.h === ref.h);
-  const skipped = decoded.length - kept.length;
+  const sizeSkipped = decoded.length - kept.length;
 
   state.files = kept;
   state.w = ref.w; state.h = ref.h;
@@ -100,9 +121,11 @@ async function loadFiles(fileList) {
   el.toolbar.hidden = false;
   fitView();
   redraw();
-  setStatus(skipped
-    ? `Loaded. Skipped ${skipped} image(s) of a different size.`
-    : 'Paint over the watermark, then Clean.');
+  const notes = [];
+  if (sizeSkipped) notes.push(`skipped ${sizeSkipped} of a different size`);
+  if (failed.length) notes.push(`${failed.length} failed to decode`);
+  setStatus('Paint over the watermark, then Clean.'
+    + (notes.length ? `  (${notes.join('; ')})` : ''));
 }
 
 // --------------------------------------------------------------------------- //
