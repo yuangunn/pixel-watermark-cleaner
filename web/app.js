@@ -31,10 +31,14 @@ const state = {
   drawing: false,
   last: null,           // last brush point (image coords)
   box: null,            // { x0, y0, x1, y1 } while dragging the Box tool
+  cursor: null,         // {x, y} hover position (image coords), for the brush ring
+  baseCanvas: null,     // cached image+overlay layer (so hover stays smooth)
   previewing: false,    // showing a cleaned preview of the reference
   previewRGBA: null,
   cv: null,             // cached OpenCV runtime
 };
+
+const BUILD = 'build 2026-06-02e';   // bump on each deploy; shown in the header
 
 const ctx = el.view.getContext('2d', { willReadFrequently: true });
 
@@ -144,27 +148,39 @@ function fitView() {
 
 function refRGBA() { return state.files[0].rgba; }
 
-function redraw() {
+// The image+mask layer is expensive (O(w*h)); cache it so cursor/box motion
+// only repaints the cheap top layer.
+function buildBase() {
   const display = state.previewing
     ? state.previewRGBA
     : core.overlay(refRGBA(), state.mask, state.w, state.h);
-  const buf = new ImageData(Uint8ClampedArray.from(display), state.w, state.h);
-  const off = document.createElement('canvas');
+  const off = state.baseCanvas || (state.baseCanvas = document.createElement('canvas'));
   off.width = state.w; off.height = state.h;
-  off.getContext('2d').putImageData(buf, 0, 0);
+  off.getContext('2d').putImageData(
+    new ImageData(Uint8ClampedArray.from(display), state.w, state.h), 0, 0);
+}
 
+function renderView() {
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, el.view.width, el.view.height);
-  ctx.drawImage(off, 0, 0, el.view.width, el.view.height);
+  if (state.baseCanvas) ctx.drawImage(state.baseCanvas, 0, 0, el.view.width, el.view.height);
+  const s = state.scale;
 
   if (state.box) {                         // live Box-tool rectangle
-    const s = state.scale;
     ctx.strokeStyle = '#23d18b'; ctx.lineWidth = 2; ctx.setLineDash([5, 3]);
     ctx.strokeRect(state.box.x0 * s, state.box.y0 * s,
       (state.box.x1 - state.box.x0) * s, (state.box.y1 - state.box.y0) * s);
     ctx.setLineDash([]);
   }
+  if (state.cursor && !state.previewing && (state.tool === 'brush' || state.tool === 'erase')) {
+    ctx.beginPath();
+    ctx.arc(state.cursor.x * s, state.cursor.y * s, Math.max(2, state.brush * s), 0, 7);
+    ctx.strokeStyle = state.tool === 'erase' ? '#ff6b6b' : '#23d18b';
+    ctx.lineWidth = 1.5; ctx.stroke();
+  }
 }
+
+function redraw() { buildBase(); renderView(); }   // full repaint (mask/image changed)
 
 // --------------------------------------------------------------------------- //
 // painting (pointer events: mouse + touch + pen)
@@ -206,18 +222,27 @@ function onDown(ev) {
 }
 
 function onMove(ev) {
+  if (!state.files.length) return;
+  const p = toImage(ev);
+  state.cursor = p;
   if (state.box) {
-    const p = toImage(ev);
     state.box.x1 = p.x; state.box.y1 = p.y;
-    redraw();
+    renderView();
     return;
   }
-  if (!state.drawing) return;
-  const p = toImage(ev);
-  const val = state.tool === 'erase' ? 0 : 255;
-  core.paintLine(state.mask, state.w, state.h, state.last.x, state.last.y, p.x, p.y, state.brush, val);
-  state.last = p;
-  redraw();
+  if (state.drawing) {
+    const val = state.tool === 'erase' ? 0 : 255;
+    core.paintLine(state.mask, state.w, state.h, state.last.x, state.last.y, p.x, p.y, state.brush, val);
+    state.last = p;
+    redraw();            // mask changed -> rebuild base
+    return;
+  }
+  renderView();          // just the hover cursor moved
+}
+
+function onLeave() {
+  state.cursor = null;
+  if (state.files.length) renderView();
 }
 
 function onUp() {
@@ -338,6 +363,15 @@ function doClear() {
   setStatus('Selection cleared.');
 }
 
+// Re-run the preview shortly after an option (method/palette/grow) changes, so
+// the effect is immediately visible instead of silently waiting for a re-click.
+let previewTimer = null;
+function schedulePreview() {
+  if (!state.files.length || !core.hasMask(state.mask)) return;
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(doPreview, 160);
+}
+
 // --------------------------------------------------------------------------- //
 // wiring
 // --------------------------------------------------------------------------- //
@@ -348,16 +382,25 @@ function bind() {
   for (const radio of document.querySelectorAll('input[name="tool"]'))
     radio.addEventListener('change', (e) => { state.tool = e.target.value; });
 
-  el.size.addEventListener('input', (e) => { state.brush = Number(e.target.value); });
+  el.size.addEventListener('input', (e) => {
+    state.brush = Number(e.target.value);
+    if (state.files.length) renderView();        // resize the cursor ring live
+  });
   el.preview.addEventListener('click', doPreview);
   el.run.addEventListener('click', doRunAll);
   el.undo.addEventListener('click', doUndo);
   el.clear.addEventListener('click', doClear);
 
+  // changing an option re-previews immediately so its effect is visible
+  el.method.addEventListener('change', schedulePreview);
+  el.palette.addEventListener('change', schedulePreview);
+  el.grow.addEventListener('input', schedulePreview);
+
   el.view.addEventListener('pointerdown', onDown);
   el.view.addEventListener('pointermove', onMove);
   el.view.addEventListener('pointerup', onUp);
   el.view.addEventListener('pointercancel', onUp);
+  el.view.addEventListener('pointerleave', onLeave);
   el.view.addEventListener('contextmenu', (e) => e.preventDefault());
 
   // drag & drop onto the dropzone
@@ -377,8 +420,22 @@ function bind() {
   });
 }
 
-if ('serviceWorker' in navigator)
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+// Service worker: register, check for updates, and when a NEW build takes over
+// an existing one, reload once so the user always ends up on the latest code.
+if ('serviceWorker' in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController && !reloaded) { reloaded = true; location.reload(); }
+  });
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then((reg) => reg.update()).catch(() => {});
+  });
+}
+
+// Visible build tag so it's obvious which version is running.
+const tag = document.querySelector('header .muted');
+if (tag) tag.textContent += `  ·  ${BUILD}`;
 
 bind();
-setStatus('Ready — open images to start.');
+setStatus(`Ready — open images to start.  (${BUILD})`);

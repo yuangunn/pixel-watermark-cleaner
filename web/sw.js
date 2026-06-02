@@ -5,7 +5,7 @@
  * offline with no third-party CDN dependency.
  * Bump CACHE when shipping changes to invalidate the old shell.
  */
-const CACHE = 'pwc-v3';
+const CACHE = 'pwc-v4';
 const SHELL = [
   './', './index.html', './styles.css',
   './app.js', './core.js', './engine.js',
